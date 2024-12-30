@@ -102,9 +102,15 @@
                                         </p>
 
                                         <!-- Selected file name or helper text -->
-                                        <p v-if="currentFile" class="mt-2 text-sm text-gray-600">
-                                            Selected: [[ currentFile ]]
-                                        </p>
+                                        <div v-if="currentFile"
+                                            class="mt-2 bg-blue-50 text-blue-700 py-2 px-3 rounded-md flex items-center justify-center space-x-2">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
+                                                viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M5 13l4 4L19 7" />
+                                            </svg>
+                                            <span class="font-medium">[[ currentFile ]]</span>
+                                        </div>
                                         <p v-else class="mt-2 text-sm text-gray-500">
                                             Supported formats: MP4, AVI, MOV, WMV, MKV
                                         </p>
