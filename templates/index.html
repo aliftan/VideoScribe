@@ -68,7 +68,33 @@
                             </svg>
                             <h2 class="text-xl font-semibold mb-2">Upload Video</h2>
                             <p class="text-gray-600 mb-4">Select a video or audio file to transcribe</p>
-                            </p>
+                        </div>
+
+                        <div class="m-4 text-center">
+                            <button @click="showLanguages = !showLanguages"
+                                class="text-blue-600 hover:text-blue-700 text-sm flex items-center justify-center mx-auto space-x-1">
+                                <span>[[ showLanguages ? 'Hide' : 'Show' ]] Supported Languages</span>
+                                <svg xmlns="http://www.w3.org/2000/svg"
+                                    class="h-4 w-4 transition-transform duration-200"
+                                    :class="{ 'transform rotate-180': showLanguages }" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </button>
+
+                            <!-- Languages Grid -->
+                            <transition name="fade">
+                                <div v-if="showLanguages" class="mt-4 bg-gray-50 rounded-lg p-4">
+                                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-sm">
+                                        <div v-for="(language, code) in LANGUAGE_CODES" :key="code"
+                                            class="flex items-center space-x-2 text-gray-600">
+                                            <span class="w-8 text-gray-400 font-mono uppercase">[[ code ]]</span>
+                                            <span>[[ language ]]</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </transition>
                         </div>
 
                         <!-- File upload form -->
@@ -122,6 +148,13 @@
                                     </div>
                                 </div>
                             </div>
+                        </div>
+
+                        <div v-if="currentFile" class="mb-4">
+                            <label class="flex items-center justify-center space-x-2 text-sm text-gray-600">
+                                <input type="checkbox" v-model="translateToEnglish" class="form-checkbox text-blue-600">
+                                <span>Translate to English</span>
+                            </label>
                         </div>
 
                         <div class="flex justify-center space-x-4">
@@ -183,6 +216,11 @@
                                 </span>
                             </button>
                         </div>
+                        <div v-if="detectedLanguage" class="mb-4 text-sm">
+                            <span class="text-gray-600">Detected Language: </span>
+                            <span class="font-medium text-blue-600">[[ detectedLanguage ]] ([[ languageConfidence ]]%
+                                confidence)</span>
+                        </div>
                         <div class="bg-gray-50 p-6 rounded-lg">
                             <p class="whitespace-pre-wrap text-gray-700">[[ transcript ]]</p>
                         </div>
@@ -205,9 +243,35 @@
                 </transition>
             </div>
         </div>
+
+        <!-- Footer -->
+        <footer class="mt-12 py-6 text-center text-gray-600 text-sm">
+            <p>© 2024 VideoScribe - Video to Text Transcription</p>
+        </footer>
     </div>
 
     <script>
+        const LANGUAGE_CODES = {
+            'en': 'English',
+            'id': 'Indonesian',
+            'ja': 'Japanese',
+            'ko': 'Korean',
+            'zh': 'Chinese',
+            'de': 'German',
+            'es': 'Spanish',
+            'ru': 'Russian',
+            'fr': 'French',
+            'it': 'Italian',
+            'nl': 'Dutch',
+            'pl': 'Polish',
+            'pt': 'Portuguese',
+            'tr': 'Turkish',
+            'ar': 'Arabic',
+            'hi': 'Hindi',
+            'th': 'Thai',
+            'vi': 'Vietnamese',
+        };
+
         new Vue({
             el: '#app',
             delimiters: ['[[', ']]'],
@@ -224,7 +288,11 @@
                 taskId: null,
                 statusCheckInterval: null,
                 copied: false,
-                dragOver: false
+                dragOver: false,
+                translateToEnglish: false,
+                detectedLanguage: '',
+                languageConfidence: 0,
+                showLanguages: false,
             },
             methods: {
                 onFileChange(e) {
@@ -242,6 +310,7 @@
 
                     const formData = new FormData();
                     formData.append('file', this.selectedFile);
+                    formData.append('translate', this.translateToEnglish);
 
                     try {
                         const response = await axios.post('/upload', formData, {
@@ -281,7 +350,7 @@
                                 this.error = 'File size exceeds 500MB limit';
                             }
                         } else {
-                            this.error = 'Invalid file type. Please upload a video file.';
+                            this.error = 'Invalid file type. Please upload a video or audio file.';
                         }
                     }
                 },
@@ -291,6 +360,11 @@
                         const status = response.data;
 
                         this.processingStatus = status.status.replace('_', ' ').toUpperCase();
+
+                        if (status.detected_language) {
+                            this.detectedLanguage = LANGUAGE_CODES[status.detected_language] || status.detected_language;
+                            this.languageConfidence = status.language_confidence;
+                        }
 
                         switch (status.status) {
                             case 'starting':
@@ -354,6 +428,9 @@
                     this.taskId = null;
                     this.copied = false;
                     this.stopStatusCheck();
+                    this.translateToEnglish = false;
+                    this.detectedLanguage = '';
+                    this.languageConfidence = 0;
 
                     // Reset file input
                     const fileInput = document.querySelector('input[type="file"]');
@@ -368,10 +445,6 @@
         });
     </script>
 
-    <!-- Footer -->
-    <footer class="mt-12 py-6 text-center text-gray-600 text-sm">
-        <p>© 2024 VideoScribe - Video to Text Transcription</p>
-    </footer>
 </body>
 
 </html>

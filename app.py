@@ -47,12 +47,32 @@ def extract_audio(video_path, audio_path):
         return False
 
 
-def transcribe_audio(audio_path, model_size="base"):
-    """Transcribe audio file using Whisper"""
+def transcribe_audio(audio_path, model_size="base", translate=False):
+    """Transcribe audio file using Whisper with language detection"""
     try:
         model = whisper.load_model(model_size)
-        result = model.transcribe(audio_path)
-        return result["text"]
+
+        # First detect the language
+        audio = whisper.load_audio(audio_path)
+        audio = whisper.pad_or_trim(audio)
+        mel = whisper.log_mel_spectrogram(audio).to(model.device)
+        _, probs = model.detect_language(mel)
+        detected_language = max(probs, key=probs.get)
+
+        # Now transcribe with all the options
+        options = {
+            "task": "translate" if translate else "transcribe",
+            "language": detected_language,
+            "verbose": True
+        }
+
+        result = model.transcribe(audio_path, **options)
+
+        return {
+            "text": result["text"],
+            "language": detected_language,
+            "language_probability": probs[detected_language]
+        }
     except Exception as e:
         print(f"Error during transcription: {str(e)}")
         return None
@@ -75,16 +95,19 @@ def process_file(file_path, task_id):
 
         transcription_status[task_id]['status'] = 'transcribing'
 
-        # Transcribe audio
-        transcript = transcribe_audio(audio_path)
+        # Transcribe audio with language detection
+        result = transcribe_audio(audio_path, translate=False)
 
         # Clean up
         os.remove(audio_path)
         os.remove(file_path)
 
-        if transcript:
+        if result:
             transcription_status[task_id]['status'] = 'completed'
-            transcription_status[task_id]['transcript'] = transcript
+            transcription_status[task_id]['transcript'] = result["text"]
+            transcription_status[task_id]['detected_language'] = result["language"]
+            transcription_status[task_id]['language_confidence'] = round(
+                result["language_probability"] * 100, 2)
         else:
             transcription_status[task_id]['status'] = 'failed'
 
