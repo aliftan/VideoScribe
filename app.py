@@ -5,11 +5,15 @@ from moviepy.editor import VideoFileClip
 import whisper
 import threading
 from datetime import datetime
+import shutil
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max file size
-ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'wmv', 'mkv'}
+ALLOWED_EXTENSIONS = {'mp4', 'avi', 'mov', 'wmv',
+                      'mkv', 'mp3', 'wav', 'm4a', 'aac', 'ogg'}
+VIDEO_EXTENSIONS = {'mp4', 'avi', 'mov', 'wmv', 'mkv'}
+AUDIO_EXTENSIONS = {'mp3', 'wav', 'm4a', 'aac', 'ogg'}
 
 # Create upload folder if it doesn't exist
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -17,6 +21,14 @@ os.makedirs('temp', exist_ok=True)
 
 # Store transcription status
 transcription_status = {}
+
+
+def is_video(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in VIDEO_EXTENSIONS
+
+
+def is_audio(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in AUDIO_EXTENSIONS
 
 
 def allowed_file(filename):
@@ -46,16 +58,20 @@ def transcribe_audio(audio_path, model_size="base"):
         return None
 
 
-def process_video(video_path, task_id):
-    """Process video file and update status"""
+def process_file(file_path, task_id):
+    """Process video or audio file and update status"""
     try:
-        transcription_status[task_id]['status'] = 'extracting_audio'
-
-        # Extract audio
-        audio_path = os.path.join('temp', f'audio_{task_id}.mp3')
-        if not extract_audio(video_path, audio_path):
-            transcription_status[task_id]['status'] = 'failed'
-            return
+        # Check if it's a video file that needs audio extraction
+        if is_video(file_path):
+            transcription_status[task_id]['status'] = 'extracting_audio'
+            audio_path = os.path.join('temp', f'audio_{task_id}.mp3')
+            if not extract_audio(file_path, audio_path):
+                transcription_status[task_id]['status'] = 'failed'
+                return
+        else:
+            # For audio files, just copy to temp directory
+            audio_path = os.path.join('temp', f'audio_{task_id}.mp3')
+            shutil.copy2(file_path, audio_path)
 
         transcription_status[task_id]['status'] = 'transcribing'
 
@@ -64,7 +80,7 @@ def process_video(video_path, task_id):
 
         # Clean up
         os.remove(audio_path)
-        os.remove(video_path)
+        os.remove(file_path)
 
         if transcript:
             transcription_status[task_id]['status'] = 'completed'
@@ -84,10 +100,10 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    if 'video' not in request.files:
-        return jsonify({'error': 'No video file provided'}), 400
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
 
-    file = request.files['video']
+    file = request.files['file']
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
 
@@ -97,9 +113,9 @@ def upload_file():
 
         # Save file
         filename = secure_filename(file.filename)
-        video_path = os.path.join(
+        file_path = os.path.join(
             app.config['UPLOAD_FOLDER'], f"{task_id}_{filename}")
-        file.save(video_path)
+        file.save(file_path)
 
         # Initialize status
         transcription_status[task_id] = {
@@ -109,12 +125,12 @@ def upload_file():
 
         # Start processing in background
         thread = threading.Thread(
-            target=process_video, args=(video_path, task_id))
+            target=process_file, args=(file_path, task_id))
         thread.start()
 
         return jsonify({
             'task_id': task_id,
-            'message': 'Video uploaded successfully'
+            'message': 'File uploaded successfully'
         })
 
     return jsonify({'error': 'Invalid file type'}), 400
